@@ -1,3 +1,4 @@
+# app/routes/auth.py
 from flask import Blueprint, request, jsonify, current_app
 from flask_jwt_extended import create_access_token
 from app import db
@@ -34,7 +35,7 @@ def register():
         verify_link = f"{current_app.config['BASE_URL']}/auth/verify?token={token}"
         send_email(email, "Verify Your Email", f"Click here to verify your email: {verify_link}")
         db.session.commit()
-        return jsonify({"message": "User registered. Check your email for verification link.", "token": token}), 201
+        return jsonify({"message": "User registered. Check your email for verification link."}), 201
     except Exception as e:
         db.session.rollback()
         return jsonify({"error": "Registration failed", "details": str(e)}), 500
@@ -61,13 +62,12 @@ def login():
                 user.kyc_token = str(uuid.uuid4())
                 user.kyc_token_expiry = datetime.utcnow() + timedelta(minutes=30)
                 db.session.commit()
-                kyc_url = f"{current_app.config['BASE_URL']}/auth/kyc/{user.id}?token={user.kyc_token}"
-                send_email(email, "Complete Your KYC", f"Click here to complete your KYC (expires in 30 minutes): {kyc_url}")
             
             return jsonify({
                 "error": "KYC not completed",
-                "message": "A new KYC link has been sent to your email.",
-                "kyc_url": f"{current_app.config['BASE_URL']}/auth/kyc/{user.id}?token={user.kyc_token}"
+                "message": "Please complete KYC to proceed.",
+                "user_id": user.id,
+                "kyc_token": user.kyc_token
             }), 401
 
         access_token = create_access_token(identity=str(user.id))
@@ -95,9 +95,12 @@ def verify_email():
         user.kyc_token_expiry = datetime.utcnow() + timedelta(minutes=30)
         db.session.commit()
 
-        kyc_url = f"{current_app.config['BASE_URL']}/auth/kyc/{user.id}?token={user.kyc_token}"
-        send_email(user.email, "Complete Your KYC", f"Click here to complete your KYC (expires in 30 minutes): {kyc_url}")
-        return jsonify({"message": "Email verified. Please complete KYC.", "kyc_url": kyc_url}), 200
+        # Return user_id and kyc_token instead of sending a KYC email
+        return jsonify({
+            "message": "Email verified. Please complete KYC.",
+            "user_id": user.id,
+            "kyc_token": user.kyc_token
+        }), 200
     except Exception as e:
         db.session.rollback()
         return jsonify({"error": "Verification failed", "details": str(e)}), 500
@@ -107,7 +110,7 @@ def submit_kyc(user_id):
     try:
         user = User.query.get(user_id)
         if not user:
-            return jsonify({"error": "User not found"}), 400
+            return jsonify({"error": "User not found"}), 404
 
         if not user.verified:
             return jsonify({"error": "Email not verified"}), 400
@@ -115,28 +118,21 @@ def submit_kyc(user_id):
         if user.kyc_completed:
             return jsonify({"error": "KYC already completed"}), 400
 
-        token = request.args.get("token")
-        if not token:
-            return jsonify({"error": "KYC token required"}), 400
-        
-        # Check if token is valid and not expired
-        if token != user.kyc_token or user.kyc_token_expiry < datetime.utcnow():
-            return jsonify({"error": "Invalid or expired KYC token"}), 400
-
-        # Token is valid; check if it’s already been used
-        if user.kyc_token is None:  # Extra safety check
-            return jsonify({"error": "KYC token already used or expired"}), 400
-
         data = request.get_json()
+        kyc_token = data.get("kyc_token")
         photo_path = data.get("photo_path")
         form_data = data.get("form_data")
 
-        if not photo_path or not form_data:
-            return jsonify({"error": "Photo and form data are required"}), 400
+        if not kyc_token or not photo_path or not form_data:
+            return jsonify({"error": "KYC token, photo path, and form data are required"}), 400
+        
+        # Validate KYC token
+        if kyc_token != user.kyc_token or user.kyc_token_expiry < datetime.utcnow():
+            return jsonify({"error": "Invalid or expired KYC token"}), 400
 
-        # Process KYC and invalidate the token
+        # Process KYC
         user.kyc_completed = True
-        user.kyc_token = None  # Clear token to make it unusable
+        user.kyc_token = None  # Clear token after use
         user.kyc_token_expiry = None
 
         blockchain_url = current_app.config["NILOTIC_API"]

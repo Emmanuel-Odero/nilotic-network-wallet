@@ -3,6 +3,7 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_mail import Mail
 from flask_jwt_extended import JWTManager
 from flask_migrate import Migrate
+from flask_cors import CORS  # Add this import
 from dotenv import load_dotenv
 import os
 
@@ -25,6 +26,7 @@ def create_app():
     app.config["NILOTIC_API"] = os.getenv("NILOTIC_API", "http://localhost:8080")
     app.config["JWT_SECRET_KEY"] = os.getenv("JWT_SECRET_KEY", app.config["SECRET_KEY"])
     app.config["SIMULATE_MINING"] = os.getenv("SIMULATE_MINING", "True") == "True"
+    app.config["CORS_ORIGIN_URL"] = os.getenv("CORS_ORIGIN_URL", "http://localhost:5173")
 
     app.config["MAIL_SERVER"] = os.getenv("MAIL_SERVER", "localhost")
     app.config["MAIL_PORT"] = int(os.getenv("MAIL_PORT", 1025))
@@ -47,6 +49,9 @@ def create_app():
     from app.cli import cli_bp
     # Add escrow_bp if you have an escrow route
     # from app.routes.escrow import escrow_bp
+
+    # Enable CORS using CORS_ORIGIN_URL from config
+    CORS(app, resources={r"/*": {"origins": app.config["CORS_ORIGIN_URL"]}})
 
     app.register_blueprint(auth_bp, url_prefix="/auth")
     app.register_blueprint(wallet_bp, url_prefix="/wallet")
