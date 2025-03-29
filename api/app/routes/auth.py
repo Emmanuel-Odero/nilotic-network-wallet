@@ -116,8 +116,16 @@ def submit_kyc(user_id):
             return jsonify({"error": "KYC already completed"}), 400
 
         token = request.args.get("token")
-        if not token or token != user.kyc_token or user.kyc_token_expiry < datetime.utcnow():
+        if not token:
+            return jsonify({"error": "KYC token required"}), 400
+        
+        # Check if token is valid and not expired
+        if token != user.kyc_token or user.kyc_token_expiry < datetime.utcnow():
             return jsonify({"error": "Invalid or expired KYC token"}), 400
+
+        # Token is valid; check if it’s already been used
+        if user.kyc_token is None:  # Extra safety check
+            return jsonify({"error": "KYC token already used or expired"}), 400
 
         data = request.get_json()
         photo_path = data.get("photo_path")
@@ -126,8 +134,9 @@ def submit_kyc(user_id):
         if not photo_path or not form_data:
             return jsonify({"error": "Photo and form data are required"}), 400
 
+        # Process KYC and invalidate the token
         user.kyc_completed = True
-        user.kyc_token = None
+        user.kyc_token = None  # Clear token to make it unusable
         user.kyc_token_expiry = None
 
         blockchain_url = current_app.config["NILOTIC_API"]
@@ -147,7 +156,8 @@ def submit_kyc(user_id):
             json={"amount": 0, "address": default_wallet_address},
             timeout=30
         )
-        response.raise_for_status()
+        if not response.ok:
+            raise requests.RequestException(f"Blockchain returned {response.status_code}: {response.text}")
 
         sync_wallet_with_blockchain(default_wallet_address)
         send_email(user.email, "KYC Completed", f"Your KYC is complete. Genesis Wallet created: {default_wallet_address}")
