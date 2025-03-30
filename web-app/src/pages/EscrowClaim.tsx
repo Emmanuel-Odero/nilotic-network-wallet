@@ -1,44 +1,51 @@
+// src/pages/EscrowClaim.tsx
 import { useState, useEffect } from "react";
+import { useAuth } from "../context/AuthContext";
 import api from "../services/api";
 import toast from "react-hot-toast";
-import { Escrow } from "../types";
+import { Escrow } from "../types"; // Define Escrow type
 import { motion } from "framer-motion";
 
-const EscrowClaim = () => {
+const EscrowClaim: React.FC = () => {
+  const { user } = useAuth();
   const [escrows, setEscrows] = useState<Escrow[]>([]);
+  const [wallets, setWallets] = useState<any[]>([]);
+  const [selectedWallet, setSelectedWallet] = useState<string>("");
   const [claimId, setClaimId] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [claiming, setClaiming] = useState(false);
 
-  // Mock fetch for escrows (replace with real API call)
   useEffect(() => {
-    const fetchEscrows = async () => {
+    const fetchData = async () => {
       try {
-        // Replace with actual endpoint once backend is ready
-        const mockEscrows: Escrow[] = [
-          { id: "1", amount: 100, status: "pending" },
-          { id: "2", amount: 50, status: "claimed" },
-        ];
-        setEscrows(mockEscrows);
+        const [walletRes, escrowRes] = await Promise.all([
+          api.get("/wallet/list"),
+          api.get("/escrow/list"), // Assuming an endpoint for escrow list
+        ]);
+        setWallets(walletRes.data.wallets || []);
+        setSelectedWallet(walletRes.data.wallets[0]?.address || "");
+        setEscrows(escrowRes.data.escrows || []);
       } catch (error) {
-        toast.error("Failed to load escrows");
+        toast.error("Failed to load escrows or wallets");
+      } finally {
+        setLoading(false);
       }
     };
-    fetchEscrows();
+    fetchData();
   }, []);
 
   const handleClaim = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!claimId) {
-      toast.error("Please enter an escrow ID");
+    if (!claimId || !selectedWallet) {
+      toast.error("Please select a wallet and enter an escrow ID");
       return;
     }
-    setLoading(true);
+    setClaiming(true);
     try {
-      // Replace with actual API call
-      await api.post("/escrow/claim", { escrow_id: claimId });
+      await api.post("/escrow/claim", { escrow_id: claimId, wallet_address: selectedWallet });
       toast.success("Escrow claimed successfully!");
-      setEscrows((prev) =>
-        prev.map((escrow) =>
+      setEscrows(prev =>
+        prev.map(escrow =>
           escrow.id === claimId ? { ...escrow, status: "claimed" } : escrow
         )
       );
@@ -46,7 +53,7 @@ const EscrowClaim = () => {
     } catch (error: any) {
       toast.error(error.response?.data?.message || "Failed to claim escrow");
     } finally {
-      setLoading(false);
+      setClaiming(false);
     }
   };
 
@@ -54,50 +61,79 @@ const EscrowClaim = () => {
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      className="container mx-auto p-6"
+      className="min-h-screen bg-gray-100 dark:bg-gray-900 p-6"
     >
-      <h1 className="text-3xl font-bold mb-6">Escrow Claim</h1>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div>
-          <h2 className="text-xl font-semibold mb-4">Pending Escrows</h2>
-          {escrows.length === 0 ? (
-            <p>No pending escrows found.</p>
-          ) : (
-            <ul className="space-y-4">
-              {escrows.map((escrow) => (
-                <motion.li
-                  key={escrow.id}
+      <div className="max-w-5xl mx-auto">
+        <h1 className="text-4xl font-bold text-center text-gray-900 dark:text-white mb-8">
+          Escrow Claims
+        </h1>
+        {loading ? (
+          <div className="flex justify-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Escrow List */}
+            <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md">
+              <h2 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">Pending Escrows</h2>
+              {escrows.length === 0 ? (
+                <p className="text-gray-600 dark:text-gray-300">No pending escrows found.</p>
+              ) : (
+                <ul className="space-y-4">
+                  {escrows.map((escrow) => (
+                    <motion.li
+                      key={escrow.id}
+                      whileHover={{ scale: 1.02 }}
+                      className="bg-gray-50 dark:bg-gray-700 p-4 rounded-md border border-gray-200 dark:border-gray-600"
+                    >
+                      <p><strong>ID:</strong> {escrow.id}</p>
+                      <p><strong>Amount:</strong> {escrow.amount} SLW</p>
+                      <p><strong>Status:</strong> {escrow.status}</p>
+                    </motion.li>
+                  ))}
+                </ul>
+              )}
+            </div>
+            {/* Claim Form */}
+            <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md">
+              <h2 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">Claim Escrow</h2>
+              <form onSubmit={handleClaim} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Select Wallet</label>
+                  <select
+                    value={selectedWallet}
+                    onChange={(e) => setSelectedWallet(e.target.value)}
+                    className="w-full p-2 mt-1 rounded-md bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600"
+                  >
+                    {wallets.map(wallet => (
+                      <option key={wallet.address} value={wallet.address}>
+                        {wallet.name} ({wallet.address.slice(0, 8)}...) - {wallet.balance} SLW
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Escrow ID</label>
+                  <input
+                    type="text"
+                    value={claimId}
+                    onChange={(e) => setClaimId(e.target.value)}
+                    placeholder="Enter Escrow ID"
+                    className="w-full p-2 mt-1 rounded-md bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600"
+                  />
+                </div>
+                <motion.button
+                  type="submit"
+                  disabled={claiming}
                   whileHover={{ scale: 1.02 }}
-                  className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-md border border-gray-200 dark:border-gray-700"
+                  className="w-full p-3 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-blue-400 transition"
                 >
-                  <p>ID: {escrow.id}</p>
-                  <p>Amount: {escrow.amount} SLW</p>
-                  <p>Status: {escrow.status}</p>
-                </motion.li>
-              ))}
-            </ul>
-          )}
-        </div>
-        <form
-          onSubmit={handleClaim}
-          className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-lg"
-        >
-          <h2 className="text-xl font-semibold mb-4">Claim Escrow</h2>
-          <input
-            type="text"
-            placeholder="Escrow ID"
-            value={claimId}
-            onChange={(e) => setClaimId(e.target.value)}
-            className="w-full p-3 mb-4 border rounded dark:bg-gray-700 dark:border-gray-600"
-          />
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full p-3 bg-secondary text-white rounded hover:opacity-90 transition"
-          >
-            {loading ? <span className="animate-spin">⏳</span> : "Claim"}
-          </button>
-        </form>
+                  {claiming ? "Claiming..." : "Claim Escrow"}
+                </motion.button>
+              </form>
+            </div>
+          </div>
+        )}
       </div>
     </motion.div>
   );

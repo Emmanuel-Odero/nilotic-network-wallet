@@ -4,7 +4,7 @@ import api from "../services/api";
 import toast from "react-hot-toast";
 import { motion } from "framer-motion";
 
-const KYCVerification = () => {
+const KYCVerification: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const { state } = useLocation();
   const navigate = useNavigate();
@@ -13,6 +13,7 @@ const KYCVerification = () => {
   const [formData, setFormData] = useState("");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [walletAddress, setWalletAddress] = useState<string | null>(null); // New state for wallet address
   const [error, setError] = useState<string | null>(null);
 
   console.log("KYCVerification - id:", id);
@@ -39,19 +40,21 @@ const KYCVerification = () => {
       return;
     }
     setLoading(true);
+    setError(null); // Clear previous errors
     const form = new FormData();
     form.append("kyc_token", kycToken);
     form.append("photo_path", photo);
     form.append("form_data", formData);
 
     try {
-      console.log("Submitting KYC for id:", id); // Add this
+      console.log("Submitting KYC for id:", id);
       const { data } = await api.post(`/auth/kyc/${id}`, form, {
         headers: { "Content-Type": "multipart/form-data" },
       });
       setMessage(data.message || "KYC submitted successfully!");
-      toast.success(data.message || "KYC submitted successfully!");
-      setTimeout(() => navigate("/login"), 2000);
+      setWalletAddress(data.wallet?.address || null); // Store wallet address from response
+      toast.success("KYC completed! Your Genesis Wallet is ready.");
+      setTimeout(() => navigate("/wallet"), 3000); // Redirect to /wallet after 3s
     } catch (err: any) {
       console.error("KYC submission error:", err.response || err);
       const errorMsg = err.response?.data?.error || "KYC submission failed";
@@ -81,7 +84,22 @@ const KYCVerification = () => {
           Complete KYC Verification
         </h2>
         {message ? (
-          <p className="text-green-600 dark:text-green-400 text-center">{message}</p>
+          <div className="text-center space-y-4">
+            <p className="text-green-600 dark:text-green-400">{message}</p>
+            {walletAddress && (
+              <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg">
+                <p className="text-sm text-gray-700 dark:text-gray-300">
+                  Your Genesis Wallet Address:
+                </p>
+                <p className="text-blue-600 dark:text-teal-400 font-mono break-all">
+                  {walletAddress}
+                </p>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
+                  Redirecting to your wallet in a moment...
+                </p>
+              </div>
+            )}
+          </div>
         ) : error ? (
           <p className="text-red-600 dark:text-red-400 text-center">{error}</p>
         ) : (

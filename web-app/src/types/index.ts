@@ -4,18 +4,19 @@ export interface User {
 }
 
 export interface Wallet {
-  id: string;
-  user_id: number;
+  id: number;
   name: string;
   address: string;
   balance: number;
-  stake: number;
+  stake?: number;
 }
 
 export interface Transaction {
-  from_address: string;
-  to_address: string;
+  id: string;
+  date: string;
+  type: "Sent" | "Received" | "Mined";
   amount: number;
+  address: string;
 }
 
 export interface Escrow {
