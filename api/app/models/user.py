@@ -11,6 +11,8 @@ class User(db.Model):
     verification_token = db.Column(db.String(64), unique=True, nullable=True)
     kyc_token = db.Column(db.String(64), unique=True, nullable=True)
     kyc_token_expiry = db.Column(db.DateTime, nullable=True)
+    reset_token = db.Column(db.String(36))
+    reset_token_expiry = db.Column(db.DateTime)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     wallets = db.relationship("Wallet", backref="user", lazy=True)
