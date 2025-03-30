@@ -7,6 +7,6 @@ load_dotenv()  # Load environment variables from .env
 app = create_app()
 
 if __name__ == "__main__":
-    host = os.getenv("APP_HOST", "0.0.0.0")  # Default to 0.0.0.0 if not set
-    port = int(os.getenv("APP_PORT", 5000))  # Default to 5000 if not set, convert to int
+    host = app.config["APP_HOST"]  # Use config from create_app
+    port = app.config["APP_PORT"]  # Use config from create_app
     app.run(debug=True, host=host, port=port)
